@@ -11,6 +11,7 @@ package com.cburch.logisim.std.memory;
 
 import static com.cburch.logisim.std.Strings.S;
 
+import com.cburch.contracts.BaseMouseListenerContract;
 import com.cburch.logisim.circuit.Circuit;
 import com.cburch.logisim.circuit.CircuitState;
 import com.cburch.logisim.comp.Component;
@@ -21,7 +22,9 @@ import com.cburch.logisim.data.Bounds;
 import com.cburch.logisim.data.Value;
 import com.cburch.logisim.fpga.designrulecheck.CorrectLabel;
 import com.cburch.logisim.fpga.designrulecheck.netlistComponent;
+import com.cburch.logisim.gui.hex.HexFile;
 import com.cburch.logisim.gui.hex.HexFrame;
+import com.cburch.logisim.gui.main.Frame;
 import com.cburch.logisim.gui.icons.ArithmeticIcon;
 import com.cburch.logisim.instance.Instance;
 import com.cburch.logisim.instance.InstanceLogger;
@@ -30,6 +33,12 @@ import com.cburch.logisim.instance.InstanceState;
 import com.cburch.logisim.instance.StdAttr;
 import com.cburch.logisim.proj.Project;
 import java.util.WeakHashMap;
+import java.util.StringTokenizer;
+import java.awt.event.MouseEvent;
+import java.io.IOException;
+import java.util.NoSuchElementException;
+import java.awt.Window;
+import javax.swing.JLabel;
 
 public class Ram extends Mem {
   /**
@@ -39,6 +48,78 @@ public class Ram extends Mem {
    * Identifier value must MUST be unique string among all tools.
    */
   public static final String _ID = "RAM";
+
+  static class ContentsAttribute extends Attribute<MemContents> {
+    public ContentsAttribute() {
+      super("contents", S.getter("ramContentsAttr"));
+    }
+
+    @Override
+    public java.awt.Component getCellEditor(Window source, MemContents value) {
+      if (source instanceof Frame frame) {
+        final var proj = frame.getProject();
+        RamAttributes.register(value, proj);
+      }
+      final var ret = new ContentsCell(source, value);
+      ret.mouseClicked(null);
+      return ret;
+    }
+
+    @Override
+    public MemContents parse(String value) {
+      System.out.println("parsing:" + value);
+      final var lineBreak = value.indexOf('\n');
+      final var first = lineBreak < 0 ? value : value.substring(0, lineBreak);
+      final var rest = lineBreak < 0 ? "" : value.substring(lineBreak + 1);
+      final var toks = new StringTokenizer(first);
+      try {
+        final var header = toks.nextToken();
+        if (!header.equals("addr/data:")) return null;
+        final var addr = Integer.parseInt(toks.nextToken());
+        final var data = Integer.parseInt(toks.nextToken());
+        return HexFile.parseFromCircFile(rest, addr, data);
+      } catch (IOException | NoSuchElementException | NumberFormatException e) {
+        return null;
+      }
+    }
+
+    @Override
+    public String toDisplayString(MemContents value) {
+      return S.get("ramContentsValue");
+    }
+
+    @Override
+    public String toStandardString(MemContents state) {
+      final var addr = state.getLogLength();
+      final var data = state.getWidth();
+      final var contents = HexFile.saveToString(state);
+      return "addr/data: " + addr + " " + data + "\n" + contents;
+    }
+  }
+
+  @SuppressWarnings("serial")
+  private static class ContentsCell extends JLabel implements BaseMouseListenerContract {
+    final Window source;
+    final MemContents contents;
+
+    ContentsCell(Window source, MemContents contents) {
+      super(S.get("romContentsValue"));
+      this.source = source;
+      this.contents = contents;
+      addMouseListener(this);
+    }
+
+    @Override
+    public void mouseClicked(MouseEvent e) {
+      if (contents == null) return;
+      final var proj = (source instanceof Frame frame) ? frame.getProject() : null;
+      final var frame = RomAttributes.getHexFrame(contents, proj, null);
+      frame.setVisible(true);
+      frame.toFront();
+    }
+  }
+
+  public static final Attribute<MemContents> CONTENTS_ATTR = new ContentsAttribute();
 
   public static class Logger extends InstanceLogger {
 
@@ -126,6 +207,9 @@ public class Ram extends Mem {
   }
 
   private MemContents getNewContents(AttributeSet attrs) {
+    if (attrs.getValue(Ram.CONTENTS_ATTR) != null) {
+      return attrs.getValue(Ram.CONTENTS_ATTR).clone();
+    }
     final var contents =
         MemContents.create(
             attrs.getValue(Mem.ADDR_ATTR).getWidth(), attrs.getValue(Mem.DATA_ATTR).getWidth(), true);

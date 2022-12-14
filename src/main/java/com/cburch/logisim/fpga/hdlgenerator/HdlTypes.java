@@ -121,6 +121,7 @@ public class HdlTypes {
 
   private final Map<Integer, HdlType> myTypes = new HashMap<>();
   private final Map<String, Integer> myWires = new HashMap<>();
+  private final Map<String, String> myInits = new HashMap<>();
 
   public HdlTypes addEnum(int identifier, String name) {
     myTypes.put(identifier, new HdlEnum(name));
@@ -150,6 +151,10 @@ public class HdlTypes {
     return this;
   }
 
+  public HdlTypes setInit(String name, String value) {
+    myInits.put(name, value);
+    return this;
+  }
   public int getNrOfTypes() {
     return myTypes.keySet().size();
   }
@@ -166,7 +171,11 @@ public class HdlTypes {
       final var typeId = myWires.get(wire);
       if (!myTypes.containsKey(typeId))
         throw new IllegalArgumentException("Enum or array type not contained in array");
-      contents.put(wire, myTypes.get(typeId).getTypeName());
+      if (myInits.containsKey(wire)) {
+        contents.put(wire, String.format("%s := %s", myTypes.get(typeId).getTypeName(), myInits.get(wire)));
+      } else {
+        contents.put(wire, myTypes.get(typeId).getTypeName());
+      }
     }
     return contents;
   }

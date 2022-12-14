@@ -44,6 +44,8 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     final var async = StdAttr.TRIG_HIGH.equals(trigger) || StdAttr.TRIG_LOW.equals(trigger);
     final var ramEntries = (1 << nrOfaddressLines);
     final var truncated = (nrOfBits % 8) != 0;
+
+    // final var contents = attrs.getValue(Mem.CONTENTS_ATTR);
     if (byteEnables) {
       for (var idx = 0; idx < nrBePorts; idx++) {
         myPorts
@@ -66,7 +68,8 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
       myPorts.add(Port.INPUT, "oe", 1, RamAppearance.getOEIndex(0, attrs));
       myTypedWires
           .addArray(MemArrayId, MemArrayStr, nrOfBits, ramEntries)
-          .addWire("s_memContents", MemArrayId);
+          .addWire("s_memContents", MemArrayId)
+          .setInit("s_memContents", "(others=>(others=>0))");
     }
     myPorts
         .add(Port.INPUT, "address", nrOfaddressLines, RamAppearance.getAddrIndex(0, attrs))

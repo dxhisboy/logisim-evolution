@@ -17,10 +17,12 @@ import com.cburch.logisim.data.AttributeOption;
 import com.cburch.logisim.data.Attributes;
 import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.instance.StdAttr;
+import com.cburch.logisim.proj.Project;
 import com.cburch.logisim.prefs.AppPreferences;
 import java.awt.Font;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.WeakHashMap;
 
 public class RamAttributes extends AbstractAttributeSet {
 
@@ -68,11 +70,23 @@ public class RamAttributes extends AbstractAttributeSet {
   private Boolean allowMisaligned = false;
   private AttributeOption typeOfEnables = Mem.USEBYTEENABLES;
   private AttributeOption ramType = VOLATILE;
+  private MemContents contents;
 
   RamAttributes() {
+    contents = MemContents.create(addrBits.getWidth(), dataBits.getWidth(), false);
     updateAttributes();
   }
+  static void register(MemContents value, Project proj) {
+    if (proj == null || listenerRegistry.containsKey(value)) {
+      return;
+    }
+    final var l = new RomContentsListener(proj);
+    value.addHexModelListener(l);
+    listenerRegistry.put(value, l);
+  }
 
+  private static final WeakHashMap<MemContents, RomContentsListener> listenerRegistry =
+    new WeakHashMap<>();
   public boolean updateAttributes() {
     final var newList = new ArrayList<Attribute<?>>();
     var changes = false;
@@ -110,6 +124,7 @@ public class RamAttributes extends AbstractAttributeSet {
     newList.add(StdAttr.LABEL_FONT);
     newList.add(StdAttr.LABEL_VISIBILITY);
     newList.add(StdAttr.APPEARANCE);
+    newList.add(Ram.CONTENTS_ATTR);
     if (changes) {
       myAttributes.clear();
       myAttributes.addAll(newList);
@@ -134,6 +149,7 @@ public class RamAttributes extends AbstractAttributeSet {
     d.allowMisaligned = allowMisaligned;
     d.typeOfEnables = typeOfEnables;
     d.ramType = ramType;
+    d.contents = contents.clone();
   }
 
   @Override
@@ -192,6 +208,9 @@ public class RamAttributes extends AbstractAttributeSet {
     if (attr == Mem.ENABLES_ATTR) {
       return (V) typeOfEnables;
     }
+    if (attr == Ram.CONTENTS_ATTR) {
+      return (V) contents;
+    }
     return null;
   }
 
@@ -201,13 +220,20 @@ public class RamAttributes extends AbstractAttributeSet {
       final var newAddr = (BitWidth) value;
       if (addrBits == newAddr) return;
       addrBits = newAddr;
+      contents.setDimensions(addrBits.getWidth(), dataBits.getWidth());
       fireAttributeValueChanged(attr, value, null);
     } else if (attr == Mem.DATA_ATTR) {
       final var newData = (BitWidth) value;
       if (dataBits == newData) return;
       dataBits = newData;
+      contents.setDimensions(addrBits.getWidth(), dataBits.getWidth());
       if (typeOfEnables.equals(Mem.USEBYTEENABLES) && updateAttributes())
         fireAttributeListChanged();
+      fireAttributeValueChanged(attr, value, null);
+    } else if (attr == Ram.CONTENTS_ATTR) {
+      final var newContents = (MemContents) value;
+      if (contents.equals(newContents)) return;
+      contents = newContents;
       fireAttributeValueChanged(attr, value, null);
     } else if (attr == Mem.ENABLES_ATTR) {
       final var val = (AttributeOption) value;
